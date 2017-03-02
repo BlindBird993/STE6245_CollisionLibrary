@@ -3,462 +3,475 @@
 
 // collision library interface
 #include <collision_interface.h>
-#include <cmath>
+
+#include <typeinfo>
 #include <unordered_map>
 
 
 namespace collision
 {
-/**
-//states
-enum class States{
-    NoChange,
+
+
+//States
+enum class States {
     Free,
     Rolling,
-    Still
-};
-
-struct StateChangeObject {
-    DynamicPSphere* obj1;
-    States stateType;
-
-    StateChangeObject(DynamicPSphere* obj1,States stateType): obj1{obj1},stateType{States::Free} {}
-
+    Still,
 };
 
 
-    template <>
-    class DynamicPhysObject<GMlib::PSphere<float>> : public DynamicPhysObject_Base<GMlib::PSphere<float>> {
+//struct StateChangeObj;
+struct StateChangeObj {
+    DynamicPSphere*                             obj;               // Object whos state will change
+    std::unordered_set<StaticPPlane*>           attachedPlanes;     // Object that obj1 will change state ACCORDING to
+    seconds_type                                time;               // Time of singularity
+    States                                      state;              // State that obj1 will change to
+
+    StateChangeObj
+    (DynamicPSphere* o1, std::unordered_set<StaticPPlane*> planes, seconds_type t, States s) :
+        obj{o1}, attachedPlanes{planes}, time{t} ,state{s} {}
+};
+
+
+class MyController : public Controller {
+    GM_SCENEOBJECT (MyController)
     public:
-        using DynamicPhysObject_Base<GMlib::PSphere<float>>::DynamicPhysObject_Base;
-
-        States                                                                     state= States::Free;
-
-        void    simulateToTInDt( seconds_type t );
-        void    NewSimulateToTInDt( seconds_type t,StaticPPlane* _surface);
-        GMlib::Vector<double, 3> externalForces () const;
-        void computeStep(seconds_type dt);
-
-        // make attached
-        void setUV(StaticPPlane* _surface,DynamicPSphere* _sphere,float u, float v);
-        GMlib::Vector<float,3> getSurfNormal(StaticPPlane* _surface,DynamicPSphere* _sphere,float u, float v);
-
-        //variable for storing ds
-
-
-        void setAttached(StaticPPlane* _p);
-        StaticPPlane* getAttachedTo();
-        StaticPPlane* getPlane();
-        void          setPlane(StaticPPlane* _surf);
-
-        const Controller* _controller;
-
-        void correctTrajectory(GMlib::Vector<double,3> updated_ds);
-
-        struct CollisionState {
-            seconds_type       time;
-            CollisionStateFlag flag;
-            CollisionState( seconds_type t, CollisionStateFlag f = CollisionStateFlag::Collision )
-                : time{std::move(t)}, flag{std::move(f)} {}
-        };
-
-    public:
-        //States          state{States::Free};
-        StaticPPlane*  _plane;
-
-        //new ds for attach surfaces
-        mutable GMlib::Vector<double,3>  new_ds;
-
-    };
-
-    class MyController : public Controller {
-        GM_SCENEOBJECT(MyController)
-        public:
-//new
-
 
         explicit MyController () = default;
 
-        void detectCollisions(double dt);
+    void add (DynamicPSphere* const sphere);
+    void add (StaticPSphere* const sphere);
+    void add (StaticPPlane* const plane);
+    void add (StaticPCylinder* const cylinder);
+    void add (StaticPBezierSurf* const surf);
+
+    // Change "value" and return type if the sphere should be able to be attached to objects other than planes
+    std::unordered_set<StaticPPlane *> getAttachedObjects(DynamicPSphere* sphere);
+    //    std::vector<StaticPPlane*> getAttachedObjects(DynamicPSphere* sphere);
 
 
-//            enum class States{
-//                Free,
-//                Sliding,
-//                AtRest,
-//                NoChange
-//            };
+    void setAttachedObjects( std::unordered_set<StaticPPlane*> plane, DynamicPSphere* sphere );
+    void detachObjects(DynamicPSphere* sphere);
 
 
-//            struct StateChangeObject {
-//                DynamicPSphere* obj1;
-//                States stateType;
+    void
+    detectStateChanges(double dt);//fill the container of singularities
 
-//                StateChangeObject(DynamicPSphere* obj1,States stateType): obj1{obj1},stateType{States::Free} {}
+    StateChangeObj
+    detectStateChange(DynamicPSphere* sphere, double dt); //check the state
 
-//            };
+    void
+    handleStates (StateChangeObj& state, double dt);//update the state
 
-//MyController add sphere
-           void add (DynamicPSphere* const sphere); //{
-//                    sphere->environment = &_environment;
-//                    _dynamic_spheres.push_back(sphere);
-//           }
-            void add (StaticPSphere* const sphere) { _static_spheres.push_back(sphere); }
-            void add (StaticPPlane* const plane) { _static_planes.push_back(plane); }
-            void add (StaticPCylinder* const cylinder) { _static_cylinders.push_back(cylinder); }
-            void add (StaticPBezierSurf* const surf) { _static_bezier_surf.push_back(surf); }
+    GMlib::Point<float,2>
+    closestPoint(DynamicPSphere& S, StaticPPlane& P);//get closest point
 
+    void handleCollision ( collision::CollisionObject& col, double dt);//checks what objects are collided
 
-            void collisionAlgorithm (seconds_type dt);
-            void DynamicColl (DynamicPSphere* d_sphere1,DynamicPSphere* d_sphere2,seconds_type dt);
-            void StaticColl (DynamicPSphere* d_sphere,const StaticPPlane* plane, seconds_type dt);
-            void detectCol(DynamicPSphere* sphere, seconds_type dt);
+    Environment                                 _stillEnvironment;
+    DefaultEnvironment                          _env;
 
-            std::vector<StaticPPlane*> &getAttachedPlanes(DynamicPSphere* s);
-
-            std::unordered_map<DynamicPSphere*,std::vector<StaticPPlane*>> bookingMap;
-
-            void attachPlaneToSphere(DynamicPSphere* sphere, StaticPPlane* plane);
-
-            StateChangeObject detectStateChanges( DynamicPSphere* sphere,double dt);
-
-            States getState(DynamicPSphere* sphere);
-
-            void setState(DynamicPSphere* sphere, States state);
-
-            void setAttachedObjects(DynamicPSphere*  sphere  , StaticPPlane* plane);
+    std::unordered_map<DynamicPSphere*, std::unordered_set<StaticPPlane*>>    _attachedPlanes;
 
 
+private:
 
-        protected:
-            std::vector<DynamicPSphere*>    _dynamic_spheres;
+    template <typename T_s, typename T_o>
+    void sphereStaticCollision(T_s* sphere, T_o* object, seconds_type dt);//collison detection
 
-            std::vector<StaticPSphere*>     _static_spheres;
+    template <typename T_s, typename T_o>
+    void sphereDynamicCollision(T_s* sphere, T_o* object, seconds_type dt);
 
-            std::vector<StaticPPlane*>      _static_planes;
+    template <class Container>
+    void sortAndMakeUniqueStates(Container& c);//sort and make states
 
-            std::vector<StaticPCylinder*>   _static_cylinders;
-            std::vector<StaticPBezierSurf*> _static_bezier_surf;
-            collision::DefaultEnvironment _environment;
+    template <typename Container_1, typename Container_2>
+    void crossUnique( Container_1 container1, Container_2 container2);// take two sorted and unique containers and crosscheck them,
+    //update containers
 
-            std::multimap<seconds_type,collision::CollisionObject> _collisions;
+protected:
+    void localSimulate (double dt) override;
 
-            //std::vector<collision::CollisionObject> _collisions;
+    std::vector<DynamicPSphere*>                _dynamic_spheres;
+    std::vector<StaticPSphere*>                 _static_spheres;
+    std::vector<StaticPPlane*>                  _static_planes;
+    std::vector<StaticPCylinder*>               _static_cylinders;
+    std::vector<StaticPBezierSurf*>             _static_bezier_surf;
 
-            void localSimulate(double dt) override final;
-        };
-
-    template <class PSurf_T, typename... Arguments>
-    std::unique_ptr<DynamicPhysObject<PSurf_T>> unittestDynamicPhysObjectFactory(Arguments... parameters) {
-
-        return std::make_unique<DynamicPhysObject<PSurf_T>>(parameters...);
-    }
-
-    template <class PSurf_T, typename... Arguments>
-    std::unique_ptr<StaticPhysObject<PSurf_T>> unittestStaticPhysObjectFactory(Arguments... parameters) {
-
-     return std::make_unique<StaticPhysObject<PSurf_T>>(parameters...);
-    }
+    std::vector<collision::CollisionObject>     _collisions;
+    std::vector<StateChangeObj>                 _singularities;
 
 
-    template <class Container_T >
-    void sortAndMakeUnique(Container_T &container)
-    {
-        //sort
-        std::sort(container.begin(),container.end(),[](const auto &a, const auto &b){
-            return a.t_in_dt < b.t_in_dt;
-        });
 
-        //make uique
-        auto pred = [](const auto& a, const auto& b){
 
-            auto is_dynamic = [](const auto *obj){
-                if (dynamic_cast<const DynamicPSphere*>(obj)) return true;
 
-                return false;
-          };
-          if(a.obj1 == b.obj2) return true;
-          if (a.obj2 == b.obj1) return true;
-          if (a.obj1 == b.obj1) return true;
-          if ( ( is_dynamic(a.obj2) or is_dynamic(b.obj2) )
-               and a.obj2 == b.obj2 ) return true;
+};
 
-       return false;
-   };
-        typename Container_T::iterator NE=std::end(container);
-        for (auto itr = std::begin(container);itr!=NE;++itr){
+template <>
+class DynamicPhysObject<GMlib::PSphere<float>> : public DynamicPhysObject_Base<GMlib::PSphere<float>> {
+public:
+    using DynamicPhysObject_Base<GMlib::PSphere<float>>::DynamicPhysObject_Base;
 
-            for (auto ritr = NE-1;ritr != itr;--ritr){
 
-                if ((pred(*itr,*ritr))){
+    MyController*   _sphereController;
+    States          _state = States::Free;     // Which state is the sphere in
 
-                    std::swap(*ritr,*(NE-1));
-                    NE--;
+    bool            checker = false;
+
+    void moveUp();
+    void moveDown();
+    void moveLeft();
+    void moveRight();
+
+    float                       u;
+    float                       v;
+
+
+    GMlib::Vector<float,3> getSurfNormal();
+    void setUV(StaticPPlane* plane);
+
+    void computeStep(double dt);
+
+    void updateX(double x);
+    double getX();
+
+
+    void setVelocity(const GMlib::Vector<double,3> vel);
+    GMlib::Vector<double,3> getVelocity();
+
+    double getMass();
+    GMlib::Vector<float,3> getDs();
+
+
+    GMlib::Vector<double,3>
+    adjustedTrajectory (seconds_type dt);
+
+
+    void            simulateToTInDt( seconds_type t ) override;
+
+    GMlib::Vector<double, 3>
+    computeTrajectory (seconds_type dt) const override; // [m]
+
+    GMlib::Vector<double, 3> externalForces () const override; // [m / s^2]
+
+
+};
+
+
+template <class PSurf_T, typename... Arguments>
+std::unique_ptr<DynamicPhysObject<PSurf_T>> unittestDynamicPhysObjectFactory(Arguments... parameters) {
+
+    return std::make_unique<DynamicPhysObject<PSurf_T>> (parameters...);
+
+}
+
+template <class PSurf_T, typename... Arguments>
+std::unique_ptr<StaticPhysObject<PSurf_T>> unittestStaticPhysObjectFactory(Arguments... parameters) {
+
+    return std::make_unique<StaticPhysObject<PSurf_T>> (parameters...);
+}
+
+// Make collisions and states crosswise unique
+template <typename Container_1, typename Container_2>
+void MyController::crossUnique(Container_1 container1, Container_2 container2) {
+
+    auto objPred =  [](const auto &a, const auto &b) {
+
+        if( a.obj1 == b.obj or a.obj2 == b.obj ) return true; //check if equal
+
+        return false;
+    };
+
+    auto timePred =  [](const auto &a, const auto &b) {
+
+        if( a.t_in_dt < b.time ) return true; //compare objects time, if collision is before the state or not
+
+        return false;//if state is first
+    };
+
+    auto inCollisionsAlreadyPred = [](Container_1 a, const auto &b) {
+
+        for( auto& c : a) {
+
+            // Check if any of the collisions objects are in the collection already
+            if( c.obj1 == b.obj1 ) return true;
+            if( c.obj1 == b.obj2 ) return true;
+            if( c.obj2 == b.obj1 ) return true;
+            if( c.obj2 == b.obj2 ) return true;
+
+            return false;// add a new object to container of collisions
+        }
+    };
+
+    auto inSingularitiesAlreadyPred = [](Container_2 a, const auto &b) {
+
+        for( auto& c : a) {
+
+            // Check if any of the state objects are in the collection already
+            if( c.obj == b.obj ) return true; //for singularities
+
+            return false;
+        }
+    };
+
+    std::vector<collision::CollisionObject>     _realCollisions; //new containers
+    std::vector<StateChangeObj>                 _realSingularities;
+
+    auto start = std::end(container2);
+
+    // Check if any object that is in CONTAINER1 is also in CONTAINER2 and compares time values to remove one
+    for( auto first_iter = std::end(container1) - 1; first_iter != std::begin(container1) -1; --first_iter) {
+        for( auto second_iter = start - 1; second_iter != std::begin(container2) -1; --second_iter ) {
+
+
+            if(( objPred( *first_iter, *second_iter ) )) { //check if the same object
+
+                if( timePred( *first_iter, *second_iter )) { //compare the time
+
+                    // Keep collision
+                    if( inCollisionsAlreadyPred(_realCollisions, *first_iter) == false) {//if collision first
+
+                        _realCollisions.push_back(*first_iter);
+                    }
+                }
+                else {
+
+                    // Keep state
+                    if( inSingularitiesAlreadyPred(_realSingularities, *second_iter) == false ) {//if singularity is first
+
+                        _realSingularities.push_back(*second_iter);
+                    }
                 }
             }
-
+        }
     }
-     container.erase(NE,std::end(container));
- }
 
+    _collisions = _realCollisions;
+    _singularities = _realSingularities;
+}
 
+// Sort and make Unique for states
+template <class Container>
+void MyController::sortAndMakeUniqueStates(Container& c) {
+
+    // Sorting
+    std::sort( std::begin(c), std::end(c), [] (const auto& a, const auto&b) {
+        return a.time < b.time;
+    });
+
+    // Make unique
+
+    auto pred =  [](const auto &a, const auto &b) {
+
+        if( a.obj == b.obj ) return true;
+
+        return false;
+    };
+
+    typename Container::iterator NE = std::end(c);
+    for( auto first_iter = std::begin(c); first_iter != NE; ++first_iter) {
+
+        for( auto r_iterator = NE - 1; r_iterator != first_iter; --r_iterator) {
+
+            if( (pred(*first_iter, *r_iterator))) {
+                std::swap( *r_iterator, *(NE-1) );
+                NE--;
+
+            }
+        }
+    }
+
+    c.erase( NE, std::end( c ) );
+}
+
+template <class Container_T >
+void sortAndMakeUnique( Container_T& container) {
 
     // Sort
-    {
-      std::sort( begin(container), end(container), [](const auto& a, const auto& b) {
-          return a.t_in_dt < b.t_in_dt;
-      });
 
-      // Make unique
+    std::sort( std::begin(container), std::end(container), [](const auto& a, const auto& b) {
+        return a.t_in_dt < b.t_in_dt;
+    });
 
-      auto pred =  [](const auto &a, const auto &b) {
+    // Make unique
 
-          auto is_d_pred = []( const auto* obj ) {
+    auto pred =  [](const auto &a, const auto &b) {
+
+        auto is_d_pred = []( const auto* obj ) {
             if(dynamic_cast<const DynamicPSphere*>(obj)) return true;
 
 
 
             return false;
-          };
-
-          if( a.obj1 == b.obj1 ) return true;
-          if( a.obj1 == b.obj2 ) return true;
-          if( a.obj2 == b.obj1 ) return true;
-          if( ( is_d_pred(a.obj2) or is_d_pred(b.obj2) )
-                  and a.obj2 == b.obj2 ) return true;
-
-          return false;
-      };
-
-      typename Container_T::iterator NE = std::end(container);
-      for( auto first_iter = std::begin(container); first_iter != NE; ++first_iter) {
-
-          for( auto r_iterator = NE - 1; r_iterator != first_iter; --r_iterator) {
-
-                  if( (pred(*first_iter, *r_iterator))) {
-                          std::swap( *r_iterator, *(NE-1) );
-                          NE--;
-
-                      }
-              }
-          }
-
-          container.erase( NE, std::end( container ) );
-
-//take one, compares to all the others, mark for removal and again...
-//    template <class PSurf_T, typename... Arguments>
-//    std::unique_ptr<StaticPhysObject<PSurf_T>> unittestStaticPhysObjectFactory(Arguments... parameters) {
-
-//        return std::make_unique<StaticPhysObject<PSurf_T>> (parameters...);
-//    }
-
-
-**/
-
-
-
-
-enum class states {
-      NoChange,
-      Free,
-      Rolling,
-      Still
-  };
-
-//  struct stateChangeObject{
-//       DynamicPSphere* obj;
-//       states stateChanges;
-
-
-//      stateChangeObject( DynamicPSphere* object, states s  )
-//          : obj{object}, stateChanges{s} {}
-//  };
-
-  struct stateChangeObj {
-      DynamicPSphere*                 sphere_obj;   // Object whos state will change
-      std::vector<StaticPPlane*>      planes;   // Object that obj1 will change state ACCORDING to
-      seconds_type                    time;   // Time of singularity
-      states                          stateChange;  // State that obj1 will change to
-
-      stateChangeObj
-      (DynamicPSphere* obj1, std::vector<StaticPPlane*> obj2, seconds_type t,states s) :
-          sphere_obj{obj1}, planes{obj2}, time{t} ,stateChange{s} {}
-  };
-
-
-  class MyController : public Controller {
-      GM_SCENEOBJECT (MyController)
-
-  public:
-
-      //explicit MyController () = default;
-
-      void add (DynamicPSphere* const sphere);
-      void add (StaticPSphere* const sphere) { _static_spheres.push_back(sphere);  }
-      void add (StaticPPlane* const plane) { _static_planes.push_back(plane); }
-      void add (StaticPCylinder* const cylinder) { _static_cylinders.push_back(cylinder); }
-      void add (StaticPBezierSurf* const surf) { _static_bezier_surf.push_back(surf); }
-
-  protected:
-      void localSimulate (double dt) override;
-      void detectCollisions(double dt);
-
-      void setAttachedObjects(DynamicPSphere*  sphere  , StaticPPlane* plane);
-      void setDeattachedObjects(DynamicPSphere*  sphere  , StaticPPlane* plane);
-
-
-
-      std::vector<StaticPPlane*>  const getAttachedPlanes(DynamicPSphere* sphere) ;
-
-      void setState(DynamicPSphere* sphere, states state);
-
-      states getState(DynamicPSphere* sphere);
-
-      void detectStateChanges(double dt);
-      stateChangeObj detectStateChange( DynamicPSphere* sphere,double dt);
-
-      void attachPlane(DynamicPSphere*  sphere  , StaticPPlane* plane);
-      void detachPlane(DynamicPSphere*  sphere  , StaticPPlane* plane);
-
-      void detectSingularities(double dt);
-
-
-
-      std::vector<DynamicPSphere*>                                                                          _dynamic_spheres;
-      std::vector<StaticPSphere*>                                                                           _static_spheres;
-      std::vector<StaticPPlane*>                                                                            _static_planes;
-      std::vector<StaticPCylinder*>                                                                         _static_cylinders;
-      std::vector<StaticPBezierSurf*>                                                                       _static_bezier_surf;
-
-      std::multimap<seconds_type,collision::CollisionObject>                                                _collisions;
-      std::multimap<seconds_type,stateChangeObj>                                                            _singularities;
-
-      std::unordered_map<DynamicPSphere* , std::vector<StaticPPlane*>>                                      attachedPlanes;
-      DefaultEnvironment                                                                                    _environment;
-
-  };
-
-  template <>
-  class DynamicPhysObject<GMlib::PSphere<float>> : public DynamicPhysObject_Base<GMlib::PSphere<float>> {
-  public:
-      using DynamicPhysObject_Base<GMlib::PSphere<float>>::DynamicPhysObject_Base;
-
-      states                                                                     state= states::Free;
-      GMlib::Vector<float,3>                                                     trajectory;
-      std::set<StaticPPlane*>                                                    _planes;
-      void addPlanes(StaticPPlane* plane);
-      GMlib::Vector<double,3> adjustedTrajectory(seconds_type dt);
-
-
-      void    simulateToTInDt( seconds_type t) override;
-
-      GMlib::Vector<double,3> computeTrajectory( seconds_type dt) const override {
-
-              auto t=dt.count();
-              auto F = this->externalForces();
-              const auto a = 0.5*F*std::pow(t,2)*this->mass;
-              return this->velocity*t + a;
-      }
-
-
-      GMlib::Vector<double, 3> externalForces () const override ;
-
-  };
-
-  template <class PSurf_T, typename... Arguments>
-  std::unique_ptr<DynamicPhysObject<PSurf_T>> unittestDynamicPhysObjectFactory(Arguments... parameters) {
-
-      return std::make_unique<DynamicPhysObject<PSurf_T>> (parameters...);
-
-  }
-
-  template <class PSurf_T, typename... Arguments>
-  std::unique_ptr<StaticPhysObject<PSurf_T>> unittestStaticPhysObjectFactory(Arguments... parameters) {
-
-      return std::make_unique<StaticPhysObject<PSurf_T>> (parameters...);
-  }
-
-  template <class Container_T >
-  void sortAndMakeUnique( Container_T& container) {
-
-  //make unique;
-      for (auto it1 = container.begin() ; it1 != container.end() ; ++it1){
-
-          for (auto it2 = std::next(it1,1) ; it2 != container.end() ;){
-
-              if (it2->second.obj1 == it1->second.obj1 || it2->second.obj2 == it1->second.obj1 ||
-                      it2->second.obj1 == it1->second.obj2 ||
-                      (it2->second.obj2 == it1->second.obj2 && dynamic_cast<DynamicPSphere*> (it1->second.obj2)))
-                    {
-                      container.erase(it2++);
-                    }
-              else
-                    {
-                      ++it2;
-                    }
-          }
-      }
-
-
-
-  }
-
-
-  template <class Container_T >
-  void statesSortAndMakeUnique(Container_T &container)
-  {
-      //sort
-      std::sort(container.begin(),container.end(),[](const auto &a, const auto &b){
-          return a.t_in_dt < b.t_in_dt;
-      });
-
-      //make uique
-      auto pred = [](const auto& a, const auto& b){
-
-          auto is_dynamic = [](const auto *obj){
-              if (dynamic_cast<const DynamicPSphere*>(obj)) return true;
-
-              return false;
         };
-        if(a.obj1 == b.obj2) return true;
-        if (a.obj2 == b.obj1) return true;
-        if (a.obj1 == b.obj1) return true;
-        if ( ( is_dynamic(a.obj2) or is_dynamic(b.obj2) )
-             and a.obj2 == b.obj2 ) return true;
 
-     return false;
- };
-      typename Container_T::iterator NE=std::end(container);
-      for (auto itr = std::begin(container);itr!=NE;++itr){
+        if( a.obj1 == b.obj1 ) return true;
+        if( a.obj1 == b.obj2 ) return true;
+        if( a.obj2 == b.obj1 ) return true;
+        if( ( is_d_pred(a.obj2) or is_d_pred(b.obj2) )
+                and a.obj2 == b.obj2 ) return true;
 
-          for (auto ritr = NE-1;ritr != itr;--ritr){
+        return false;
+    };
 
-              if ((pred(*itr,*ritr))){
+    typename Container_T::iterator NE = std::end(container);
+    for( auto first_iter = std::begin(container); first_iter != NE; ++first_iter) {
 
-                  std::swap(*ritr,*(NE-1));
-                  NE--;
-              }
-          }
+        for( auto r_iterator = NE - 1; r_iterator != first_iter; --r_iterator) {
 
-  }
-   container.erase(NE,std::end(container));
+            if( (pred(*first_iter, *r_iterator))) {
+                std::swap( *r_iterator, *(NE-1) );
+                NE--;
+
+            }
+        }
+    }
+
+    container.erase( NE, std::end( container ) );
+
+} // EOF
+
+
+template <typename T_s, typename T_o>
+inline
+void MyController::sphereDynamicCollision(T_s* sphere, T_o* object, seconds_type dt) {
+
+    bool movingObject = false;
+
+    for( auto& s : _dynamic_spheres ) {
+        if( s->_state != States::Still ) {
+            movingObject = true;
+            break;
+        }
+    }
+
+    if( movingObject ) {
+
+        // Sphere vs. Dynamic Sphere
+        for( auto iter = std::begin(_dynamic_spheres); iter != std::end(_dynamic_spheres); ++iter) {
+
+            if( (*iter == sphere) or (*iter == object) or (sphere->_state == States::Still)) {//if sphere is not the same or still
+                break;
+            }
+            else {
+
+                // Check only for collisions for the first dynamic sphere
+                auto col = collision::detectCollision(*sphere, **iter, dt);
+
+                // The check for if the second object is a dynamic sphere is done in the main algorithm
+                // and the method is called again only with the 1'st and 2'nd sphere swapped
+
+                if( col.CollisionState::flag == CollisionStateFlag::Collision ) {
+
+                    auto& first_sphere = sphere;
+                    auto& second_sphere = *iter;
+
+                    auto new_t = std::max(first_sphere->curr_t_in_dt, second_sphere->curr_t_in_dt);
+
+                    if( col.time > seconds_type(new_t) and col.time < dt) {
+                        auto col_obj = CollisionObject(first_sphere, second_sphere, col.time);
+                        _collisions.push_back(col_obj);
+
+
+                    }
+                }
+            }
+        }
+    }
+
 }
 
+template <typename T_s, typename T_o>
+inline
+void MyController::sphereStaticCollision(T_s* sphere, T_o* object, seconds_type dt)
+{
+
+    bool movingObject = false;
+
+    for( auto& s : _dynamic_spheres ) {
+        if( s->_state != States::Still ) {
+            movingObject = true;
+            break;
+        }
+    }
+
+    if( movingObject ) {
 
 
+        // The game will mainly have two types of static objects that can be collided with, planes and bezier surfaces
+        // Checks to see which one the sphere has collided with
+        auto plane = dynamic_cast<const StaticPPlane*>(object);
+        //auto bezier_s = dynamic_cast<const StaticPBezierSurf*>(object);
 
 
+        // Sphere vs. Static Plane
+        if( plane ) {
+
+            auto attachedPlanes = getAttachedObjects(sphere);
+
+            for( auto iter1 = std::begin(_static_planes); iter1 != std::end(_static_planes); ++iter1) {
 
 
+                // If sphere is attached to the plane, it should NOT check for collisions with it
+                if( !attachedPlanes.empty() ) {
+                    for( auto iter2 = attachedPlanes.begin(); iter2 != attachedPlanes.end(); ++iter2) {
+
+                        if( *iter1 == *iter2) break;
+                        else {
+
+                            // Else look for collision
+                            auto col = collision::detectCollision(*sphere, **iter1, dt);
+
+                            if( col.CollisionState::flag == CollisionStateFlag::Collision ) {
+
+                                auto& static_object = *iter1;
+
+                                auto new_t = sphere->curr_t_in_dt;
+
+                                if( col.time > seconds_type(new_t) and col.time < dt)
+                                {
+                                    auto col_obj = CollisionObject(sphere, static_object, col.time);
+                                    _collisions.push_back(col_obj);
+
+                                }
+                            }
+                        }
+                    }
+                }
+                else if( sphere->_state != States::Still) {
+
+                    auto col = collision::detectCollision(*sphere, **iter1, dt);
+
+                    if( col.CollisionState::flag == CollisionStateFlag::Collision ) {
+
+                        auto& static_object = *iter1;
+
+                        auto new_t = sphere->curr_t_in_dt;
+
+                        if( col.time > seconds_type(new_t) and col.time < dt)
+                        {
+                            auto col_obj = CollisionObject(sphere, static_object, col.time);
+                            _collisions.push_back(col_obj);
+
+                        }
+                    }
+                }
+            }
+        }
+
+    }
 
 
-
-
-
+}
 
 
 } // END namespace collision
 
 
 
-#endif //COLLISION_LIBRARY_H
+#endif
+
+
+
+
+
