@@ -8,9 +8,59 @@ namespace collision
 {
 
 
+//sphere vs cylinder collision detection
+CollisionState detectCollision ( DynamicPSphere&  S,
+                                 StaticPCylinder& C, seconds_type dt){
+    auto &_cy = const_cast<StaticPCylinder &> (C);
+    const auto tMin= S.curr_t_in_dt;
+    const auto tMax = dt;
+    const auto newDT = tMax - tMin;
+    const auto S_pos = S.getMatrixToScene() * S.getPos();
+    const auto _sradius = S.getRadius();
+    const auto cy_pos = _cy.evaluateParent(0.5f,0.5f,1,1);
+    const auto _cyradius = _cy.getRadiusX();
+    const auto ds = S.computeTrajectory(newDT);
+    const auto u = cy_pos(1)(0);
+    const auto v = cy_pos(0)(1);
+    const auto n = u ^ v;
+    const auto _n = GMlib::Vector<float,3>(n).getNormalized();
+    const auto epsilon = 0.000001;
+    const auto _d = (cy_pos(0)(0) + (_sradius + _cyradius) *_n) - S_pos;
+    const auto _R = ((S.computeTrajectory(newDT)* _n));
+    const auto _Q =(_d * _n);
+    if (std::abs(_Q) < epsilon){
+        return CollisionState(seconds_type(0.0),CollisionStateFlag::SingularityParallelAndTouching);
+    }
+    else if(std::abs(_R) < epsilon){
+        return CollisionState(seconds_type(0.0),CollisionStateFlag::SingularityParallel);
+    }
+
+    const auto x = _Q / _R;
+    return CollisionState((x*newDT)+tMin);
+}
+
+
+void
+computeImpactResponse (DynamicPhysObject<GMlib::PSphere<float>>&        S,
+                        StaticPhysObject<GMlib::PCylinder<float>>& C,
+                       seconds_type                                     dt){
+    auto &_cy=const_cast<StaticPhysObject<GMlib::PCylinder<float>>&>(C);
+    const auto cylinder_pos= _cy.evaluateParent(0.5f,0.5f,1,1);
+    const auto u = cylinder_pos(1)(0);
+    const auto v = cylinder_pos(0)(1);
+    const auto n = u ^ v;
+    const auto _n = GMlib::Vector<float,3>(n).getNormalized();
+    const auto _currentV = S.velocity;
+    const auto _vn = _currentV * _n;
+    const auto _newV = _currentV -((2*_vn )*_n);
+    S.velocity = _newV;
+}
+
+
+
 CollisionState
-detectCollision (const DynamicPhysObject<GMlib::PSphere<float>>& S0,
-                 const DynamicPhysObject<GMlib::PSphere<float>>& S1,
+detectCollision ( DynamicPhysObject<GMlib::PSphere<float>>& S0,
+                  DynamicPhysObject<GMlib::PSphere<float>>& S1,
                  seconds_type                                    dt)
 {
     const auto dt_max = dt;
@@ -241,65 +291,72 @@ CollisionState detectCollision (const DynamicPSphere&  S,
 }
 //Bjorn's code
 
-GMlib::Point<float,2>
-MyController::closestPoint(DynamicPSphere& S, StaticPPlane& P)
+GMlib::Vector<float,3>
+MyController::closestPoint(DynamicPSphere* sphere, seconds_type dt)
 {
-
-    float u, v;
-    P.estimateClpPar(S.getPos(), u, v);
-    auto closest_p = P.getClosestPoint(S.getPos(),u,v);
-    return closest_p;
-/**
-    auto &_p= P;
-    const auto S0_pos = S.getMatrixToScene() * S.getPos();
-    const auto epsilon = 1e-5;
-
-    float u, v;
-    u = 0.5;
-    v = 0.5;
-
-    for( int i=0 ; i< 3 ; i++)
-    {
-
-        const auto plane_pos = _p.evaluateParent(u,v,2,2);
-        const auto su = plane_pos(1)(0) ;
-        const auto sv = plane_pos(0)(1) ;
-        const auto q = plane_pos(0)(0);
-        const auto d = q - S0_pos;
-        const auto suu = plane_pos(2)(0);
-        const auto suv = plane_pos (1)(1);
-        const auto svv = plane_pos(0)(2);
-
-        GMlib::SqMatrix<float,2> aMatrix;
-        const auto dsuu = d*suu + su*su;
-        const auto dsvu = d*suv + su*sv;
-        const auto dsuv = d*suv + su*sv;
-        const auto dsvv = d*svv + sv*sv;
+//    float u, v;
+//    P.estimateClpPar(S.getPos(), u, v);
+//    auto closest_p = P.getClosestPoint(S.getPos(),u,v);
+//    return closest_p;
+    auto max_dt = dt;
+    auto min_dt = sphere->curr_t_in_dt;
+    auto new_dt = max_dt -min_dt;
+    auto epsilon= 1e-5;
+    float u = 0.4;
+    float v = 0.4;
+    float delta_u = 0.5;
+    float delta_v = 0.5;
+    auto  s = sphere->getMatrixToScene() * sphere->getPos();
+    auto r = sphere->getRadius();
+    GMlib::Vector<double, 3> ds = sphere->computeTrajectory(new_dt);
+    auto p = s+ds;
+    GMlib::SqMatrix<float,2> A;
+    GMlib::Vector<float, 2> b;
+    GMlib::Vector<float,3> d{0.0f,0.0f,0.0f};
 
 
-        aMatrix[0][0] = dsuu;
-        aMatrix[0][1] = dsuv;
-        aMatrix[1][0] = dsvu;
-        aMatrix[1][1] = dsvv;
-        aMatrix.invert();
+    auto  planes = _attachedPlanes[sphere];
 
-        GMlib::Vector<float,2> b;
-        const auto dsu = d*su;
-        const auto dsv = d*sv;
-        b[0] = -dsu;
-        b[1]= -dsv;
 
-        const auto x = aMatrix * b;
+    //iteration
 
-        const auto& delta_u = x(0);
-        u += delta_u;
-        const auto& delta_v = x(1);
-        v += delta_v;
-    }
+    for ( int i=0; i<10;i++/* delta_u > epsilon && delta_v > epsilon*/){
+    GMlib::Vector <float,3>Sn {0.0f,0.0f,0.0f};
+    GMlib::Vector <float,3>Su {0.0f,0.0f,0.0f};
+    GMlib::Vector <float,3>Sv {0.0f,0.0f,0.0f};
+    GMlib::Vector <float,3>Suu {0.0f,0.0f,0.0f};
+    GMlib::Vector <float,3>Svv {0.0f,0.0f,0.0f};
+    GMlib::Vector <float,3>Suv {0.0f,0.0f,0.0f};
+    GMlib::APoint <float,3>q;
 
-    GMlib::Point<float,2> closest (u,v);
-    return closest;
-**/
+    for(auto it = planes.begin(); it != planes.end(); it++){
+        GMlib::Vector<float,3> normal{0.0f,0.0f,0.0f};
+        GMlib::DMatrix<GMlib::Vector<float,3>>  M = (*it)->evaluateParent(u,v,2,2);
+         q     = M(0)(0);
+         Su += M(1)(0);
+         Sv += M(0)(1);
+        Suu += M(2)(0);
+        Svv += M(0)(2);
+        Suv += M(1)(1);
+   }
+    d =(q-p);
+    A[0][0] = d* Suu + Su * Su;
+    A[0][1] = d* Suv + Su * Sv;
+    A[1][0] = d* Suv + Su * Sv;
+    A[1][1] = d* Svv + Sv * Sv;
+    GMlib::SqMatrix<float,2> A_inv = A;
+    A_inv.invert();
+    b[0] = - d * Su;
+    b[1] = - d * Sv;
+    GMlib::APoint<float, 3> X = A_inv*b;
+    delta_u = X(0);
+    delta_v = X(1);
+    u += delta_u;
+    v += delta_v;
+
+
+}
+    return d;
 }
 
 
@@ -326,7 +383,7 @@ DynamicPhysObject<GMlib::PSphere<float> >::simulateToTInDt(seconds_type t){
         //this->curr_t_in_dt = t;
         this->velocity = {0.0f, 0.0f, 0.0f};
         this->_state = States::Still;
-        this->environment = &this->_sphereController->_stillEnvironment;
+        this->environment = &this->_sphereController->noGravEnv;
         //this->rotateGlobal(GMlib::Angle(ds.getLength()/this->getRadius()),GMlib::Vector<float,3>{0,0,1}^ds);
 
     }
@@ -407,12 +464,11 @@ DynamicPhysObject<GMlib::PSphere<float> >::adjustedTrajectory(seconds_type dt) {
     auto ds = this->computeTrajectory(seconds_type(dt));
     auto r = this->getRadius();
     auto s = this->getMatrixToScene() * this->getPos();
-    auto p = ds + s;
-
+    //auto p = ds + s;
     auto planes = this->_sphereController->getAttachedObjects(this);
     GMlib::Vector<float,3> n {0.0f, 0.0f, 0.0f};
 
-    GMlib::Point<float,2> q;
+    //GMlib::Point<float,3> q;
 
     for( auto& plane : planes ) {
 
@@ -421,16 +477,17 @@ DynamicPhysObject<GMlib::PSphere<float> >::adjustedTrajectory(seconds_type dt) {
         const auto v = M(0)(1);
         auto normal = GMlib::Vector<float,3> (u ^ v);
         n += normal;
-        q = _sphereController->closestPoint(*this, *plane);
+        //q = _sphereController->closestPoint(*this, dt);
     }
 
     n = GMlib::Vector<float,3> (n / planes.size()).getNormalized();
+    auto closest_p = this->_sphereController->closestPoint(this,dt);
 
-    //        auto adjusted_ds = ds + (r + (p * s) )* n;
-    auto adjusted_ds = ds + (q - (s + ds)) + (n * r);
+    auto adjusted_ds = ds+ (n*r)+closest_p;
+
+    //std::cout << "Good" << std::endl;
 
     return adjusted_ds;
-
 
 }
 
@@ -495,7 +552,7 @@ MyController::localSimulate(double dt) {
                 auto c = _collisions.back();
                 _collisions.pop_back();;
 
-                handleCollision(c, dt);     // Also detects more collisions
+                detectCollisions(c, dt);     // Also detects more collisions
 
                 detectStateChanges(dt);
 
@@ -519,7 +576,7 @@ MyController::localSimulate(double dt) {
                 auto s = _singularities.back();
                 _singularities.pop_back();
 
-                handleStates(s, dt);
+                detectStates(s, dt);
 
                 // Collision detection algorithm
                 for( auto& sphere : _dynamic_spheres) {
@@ -556,7 +613,7 @@ MyController::localSimulate(double dt) {
             auto c = _collisions.back();
             _collisions.pop_back();;
 
-            handleCollision(c, dt);     // Also detects more collisions
+            detectCollisions(c, dt);     // Also detects more collisions
 
             detectStateChanges(dt);
 
@@ -581,7 +638,7 @@ MyController::localSimulate(double dt) {
             auto s = _singularities.back();
             _singularities.pop_back();
 
-            handleStates(s, dt);
+            detectStates(s, dt);
 
             // Collision detection algorithm
             for( auto& sphere : _dynamic_spheres) {
@@ -624,7 +681,7 @@ MyController::localSimulate(double dt) {
 
 // Singularity handeling
 void
-MyController::handleStates(StateChangeObj &state, double dt) {
+MyController::detectStates(StateChangeObj &state, double dt) {
 
     auto sphere = state.obj;
     auto newState = state.state;
@@ -643,7 +700,7 @@ MyController::handleStates(StateChangeObj &state, double dt) {
 
         if( newState == States::Still) {
 
-            sphere->environment = &_stillEnvironment;
+            sphere->environment = &noGravEnv;
             sphere->velocity = GMlib::Vector<double,3> (0.0f, 0.0f, 0.0f);
         }
     }
@@ -653,7 +710,7 @@ MyController::handleStates(StateChangeObj &state, double dt) {
 
 // Collision handeling
 void
-MyController::handleCollision(CollisionObject &c, double dt) {
+MyController::detectCollisions(CollisionObject &c, double dt) {
 
 
     // Add more objects here if you end up using more
@@ -661,7 +718,7 @@ MyController::handleCollision(CollisionObject &c, double dt) {
     auto d_sphere_2     = dynamic_cast<DynamicPSphere*>(c.obj2);
     auto s_sphere_2     = dynamic_cast<StaticPSphere*>(c.obj2);
     auto s_plane_2      = dynamic_cast<StaticPPlane*>(c.obj2);
-    auto s_bezier_2     = dynamic_cast<StaticPBezierSurf*>(c.obj2);
+   //auto s_bezier_2     = dynamic_cast<StaticPBezierSurf*>(c.obj2);
 
 
 
@@ -708,6 +765,8 @@ MyController::handleCollision(CollisionObject &c, double dt) {
         }
     }
 }
+
+
 
 void
 MyController::detectStateChanges(double dt) {
@@ -914,10 +973,30 @@ MyController::add(StaticPBezierSurf * const surf) {
 }
 
 
+void collision::DynamicPhysObject<GMlib::PSphere<float> >::getThrough()
+{
+    if (this->going_through == false){
+        this->going_through = true;
+        //this->environment = &this->_sphereController->noGravEnv;
+        std::cout << "true" << std::endl;
+
+    }
+    else if (this->going_through == true){
+        this->going_through = false;
+       // this->environment = &this->_sphereController->_env;
+        std::cout << "false" << std::endl;
+    }
+
+    //this->translateGlobal(GMlib::Vector<float,3>(2.0f,0.0f,0.0f));
+
+}
+
+
+
 
 void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveUp()
 {
-    std::cout << "up" << std::endl;
+    //std::cout << "up" << std::endl;
     this->checker = true;
 
     if (this->_state == States::Still){
@@ -925,12 +1004,8 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveUp()
 
         this->velocity[2] += 1.0;
 
-        std::cout << "Foo" << std::endl;
+        //std::cout << "Foo" << std::endl;
     }
-
-//        this->environment = &this->_sphereController->_env;
-//        this->velocity = GMlib::Vector<double,3> (0.0f, 1.0f, 0.0f);
-
 
     GMlib::Vector<double,3> newVelVect = this->getVelocity();
 
@@ -960,14 +1035,12 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveUp()
 
 void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveDown()
 {
-    std::cout << "down" << std::endl;
+    //std::cout << "down" << std::endl;
 
     if (this->_state == States::Still){
-//        this->_state = States::Rolling;
 
         this->velocity[2] += 1.0;
 
-        std::cout << "Foo" << std::endl;
     }
 
 
@@ -996,14 +1069,12 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveDown()
 
 void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveLeft()
 {
-    std::cout << "left" << std::endl;
+    //std::cout << "left" << std::endl;
 
     if (this->_state == States::Still){
-//        this->_state = States::Rolling;
 
         this->velocity[2] += 1.0;
 
-        std::cout << "Foo" << std::endl;
     }
 
 
@@ -1033,14 +1104,12 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveLeft()
 
 void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveRight()
 {
-    std::cout << "right" << std::endl;
+    //std::cout << "right" << std::endl;
 
     if (this->_state == States::Still){
-//        this->_state = States::Rolling;
 
         this->velocity[2] += 1.0;
 
-        std::cout << "Foo" << std::endl;
     }
 
 
@@ -1093,6 +1162,37 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::computeStep(double dt
 {
 
 }
+
+int collision::StaticPhysObject<GMlib::PPlane<float> >::getId() const
+{
+    return this->id;
+}
+
+void collision::StaticPhysObject<GMlib::PPlane<float> >::setId(int value)
+{
+    this->id = value;
+}
+
+void collision::DynamicPhysObject<GMlib::PSphere<float> >::translateUp()
+{
+    this->translateGlobal(GMlib::Vector<float,3>(0.0f,2.0f,0.0f));
+}
+
+void collision::DynamicPhysObject<GMlib::PSphere<float> >::translateDown()
+{
+    this->translateGlobal(GMlib::Vector<float,3>(0.0f,-2.0f,0.0f));
+}
+
+void collision::DynamicPhysObject<GMlib::PSphere<float> >::translateLeft()
+{
+    this->translateGlobal(GMlib::Vector<float,3>(-2.0f,0.0f,0.0f));
+}
+
+void collision::DynamicPhysObject<GMlib::PSphere<float> >::translateRight()
+{
+    this->translateGlobal(GMlib::Vector<float,3>(2.0f,0.0f,0.0f));
+}
+
 
 
 
