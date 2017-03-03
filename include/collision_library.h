@@ -61,17 +61,21 @@ class MyController : public Controller {
     detectStateChange(DynamicPSphere* sphere, double dt); //check the state
 
     void
-    handleStates (StateChangeObj& state, double dt);//update the state
+    detectStates (StateChangeObj& state, double dt);//update the state
 
-    GMlib::Point<float,2>
-    closestPoint(DynamicPSphere& S, StaticPPlane& P);//get closest point
+//    GMlib::Point<float,3>                 closePoint(DynamicPSphere&  S,StaticPPlane& P , seconds_type dt);
 
-    void handleCollision ( collision::CollisionObject& col, double dt);//checks what objects are collided
+GMlib::Vector<float,3>
+    closestPoint(DynamicPSphere* sphere, seconds_type dt);//get closest point
 
-    Environment                                 _stillEnvironment;
+    void detectCollisions ( collision::CollisionObject& col, double dt);//checks what objects are collided
+
+    Environment                                 noGravEnv;
     DefaultEnvironment                          _env;
 
     std::unordered_map<DynamicPSphere*, std::unordered_set<StaticPPlane*>>    _attachedPlanes;
+
+
 
 
 private:
@@ -123,6 +127,17 @@ public:
     void moveLeft();
     void moveRight();
 
+
+    void translateUp();
+    void translateDown();
+    void translateLeft();
+    void translateRight();
+
+
+    bool   going_through = false;
+
+    void    getThrough();
+
     float                       u;
     float                       v;
 
@@ -153,6 +168,26 @@ public:
     computeTrajectory (seconds_type dt) const override; // [m]
 
     GMlib::Vector<double, 3> externalForces () const override; // [m / s^2]
+
+
+};
+
+template <>
+class StaticPhysObject<GMlib::PPlane<float>> :  public PhysObject<GMlib::PPlane<float>, PhysObjectType::Static> {
+public:
+    int id=0;
+
+//    void moveUp();
+//    void moveDown();
+//    void moveLeft();
+//    void moveRight();
+    using PhysObject<GMlib::PPlane<float>, PhysObjectType::Static>::PhysObject;
+
+
+    void simulateToTInDt (seconds_type) override {}
+
+    int getId() const;
+    void setId(int value);
 
 
 };
@@ -336,16 +371,16 @@ template <typename T_s, typename T_o>
 inline
 void MyController::sphereDynamicCollision(T_s* sphere, T_o* object, seconds_type dt) {
 
-    bool movingObject = false;
+    bool moveObj = false;
 
     for( auto& s : _dynamic_spheres ) {
         if( s->_state != States::Still ) {
-            movingObject = true;
+            moveObj = true;
             break;
         }
     }
 
-    if( movingObject ) {
+    if( moveObj ) {
 
         // Sphere vs. Dynamic Sphere
         for( auto iter = std::begin(_dynamic_spheres); iter != std::end(_dynamic_spheres); ++iter) {
@@ -381,44 +416,64 @@ void MyController::sphereDynamicCollision(T_s* sphere, T_o* object, seconds_type
 
 }
 
+// Sphere and Static Plane
 template <typename T_s, typename T_o>
 inline
 void MyController::sphereStaticCollision(T_s* sphere, T_o* object, seconds_type dt)
 {
 
-    bool movingObject = false;
+    bool moveObj = false;
 
     for( auto& s : _dynamic_spheres ) {
         if( s->_state != States::Still ) {
-            movingObject = true;
+            moveObj = true;
             break;
         }
     }
 
-    if( movingObject ) {
+    if( moveObj ) {
 
 
-        // The game will mainly have two types of static objects that can be collided with, planes and bezier surfaces
         // Checks to see which one the sphere has collided with
         auto plane = dynamic_cast<const StaticPPlane*>(object);
-        //auto bezier_s = dynamic_cast<const StaticPBezierSurf*>(object);
 
+        float u,v;
 
         // Sphere vs. Static Plane
         if( plane ) {
+
+            //start
+//          if (sphere->going_through == false){
 
             auto attachedPlanes = getAttachedObjects(sphere);
 
             for( auto iter1 = std::begin(_static_planes); iter1 != std::end(_static_planes); ++iter1) {
 
 
-                // If sphere is attached to the plane, it should NOT check for collisions with it
+                // If sphere is attached to the plane, it should not check for collisions with it
                 if( !attachedPlanes.empty() ) {
                     for( auto iter2 = attachedPlanes.begin(); iter2 != attachedPlanes.end(); ++iter2) {
 
                         if( *iter1 == *iter2) break;
-                        else {
 
+                        //add an additional condition
+                        else{
+
+//                            std::cout << "Bad" << std::endl;
+//                            u = 0.5;
+//                            v = 0.5;
+//                            (*iter1)->estimateClpPar((*sphere).getPos(), u, v);
+//                            auto closest_p = (*iter1)->getClosestPoint((*sphere).getPos(),u,v);//true or false, if true check for boundaries
+
+                            //start if
+//                            if ((closest_p == true) and (u > (*iter1)->getParStartU() and u <= (*iter1)->getParEndU())
+//                                    and (v > (*iter1)->getParStartV() and v<= (*iter1)->getParEndV()))
+//                            {
+                            // std::cout << u << " " << v << std::endl;
+
+//                             std::cout << (*iter1)->getParStartU() << " " << (*iter1)->getParStartV() << std::endl;
+
+//                             std::cout << (*iter1)->getParEndU() << " " << (*iter1)->getParEndV() << std::endl;
                             // Else look for collision
                             auto col = collision::detectCollision(*sphere, **iter1, dt);
 
@@ -435,7 +490,8 @@ void MyController::sphereStaticCollision(T_s* sphere, T_o* object, seconds_type 
 
                                 }
                             }
-                        }
+                        //}// end of if
+                      }
                     }
                 }
                 else if( sphere->_state != States::Still) {
@@ -459,10 +515,35 @@ void MyController::sphereStaticCollision(T_s* sphere, T_o* object, seconds_type 
             }
         }
 
+//        }//end
+
     }
 
 
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 } // END namespace collision
