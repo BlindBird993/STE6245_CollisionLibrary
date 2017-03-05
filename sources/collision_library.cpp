@@ -106,6 +106,7 @@ computeImpactResponse (DynamicPhysObject<GMlib::PSphere<float>>& S0,
 }
 #define end1 }
 
+
 #define detectCollisionSpherePlaneMethod {
 CollisionState
 detectCollision (DynamicPhysObject<GMlib::PSphere<float>>& S,
@@ -182,6 +183,7 @@ computeImpactResponse (DynamicPhysObject<GMlib::PSphere<float>>&      S,
 }
 #define end1 }
 
+
 #define detectCollisionSphereBezierMethod {
 CollisionState detectCollision (const DynamicPSphere&  S,
                                 const StaticPBezierSurf& B, seconds_type dt) {
@@ -242,6 +244,8 @@ CollisionState detectCollision (const DynamicPSphere&  S,
     return CollisionState(seconds_type(dt_min), CollisionStateFlag::SingularityNoCollision);
 }
 #define end1 }
+
+
 
 #define closestPointMethod {
 /** Code developed with help from Bjørn-Richard Pedersen and Fatemeh Heidari **/
@@ -365,6 +369,7 @@ DynamicPhysObject<GMlib::PSphere<float> >::simulateToTInDt(seconds_type t){
 }
 #define end1 }
 
+
 #define computeTrajectoryMethod {
 GMlib::Vector<double,3>
 DynamicPhysObject<GMlib::PSphere<float> >::computeTrajectory(seconds_type dt) const {
@@ -410,6 +415,7 @@ DynamicPhysObject<GMlib::PSphere<float> >::adjustedTrajectory(seconds_type dt) {
 }
 #define end1 }
 
+
 #define externalForcesMethod {
 GMlib::Vector<double,3>
 DynamicPhysObject<GMlib::PSphere<float> >::externalForces() const {
@@ -419,6 +425,7 @@ DynamicPhysObject<GMlib::PSphere<float> >::externalForces() const {
     return this->environment->externalForces().toType<double>();
 }
 #define end1 }
+
 
 #define localSimulateMethod {
 /** Code developed with help from Bjørn-Richard Pedersen and Fatemeh Heidari **/
@@ -452,8 +459,6 @@ MyController::localSimulate(double dt) {
     else {
         // Make sure that the newest event is at the front of the vector
         reverseMethod(_singularities,_collisions);
-//        std::reverse(_singularities.begin(), _singularities.end() );
-//        std::reverse(_collisions.begin(), _collisions.end());
     }
 
     while( !_collisions.empty() or !_singularities.empty() ) {
@@ -483,9 +488,7 @@ MyController::localSimulate(double dt) {
                 }
                 else {
                     // Make sure that the newest event is at the front of the vector
-                     reverseMethod(_singularities,_collisions);
-//                    std::reverse(_singularities.begin(), _singularities.end());
-//                    std::reverse(_collisions.begin(), _collisions.end());
+                     reverseMethod(_singularities,_collisions);;
                 }
             }
 
@@ -517,8 +520,6 @@ MyController::localSimulate(double dt) {
                 else {
                     // Make sure that the newest event is at the front of the vector
                      reverseMethod(_singularities,_collisions);
-//                    std::reverse(_singularities.begin(), _singularities.end() );
-//                    std::reverse(_collisions.begin(), _collisions.end());
                 }
             }
         }
@@ -543,8 +544,6 @@ MyController::localSimulate(double dt) {
             else {
                 // Make sure that the newest event is at the front of the vector
                 reverseMethod(_singularities,_collisions);
-//                std::reverse(_singularities.begin(), _singularities.end() );
-//                std::reverse(_collisions.begin(), _collisions.end());
             }
 
         }
@@ -577,8 +576,6 @@ MyController::localSimulate(double dt) {
             else {
                 // Make sure that the newest event is at the front of the vector
                 reverseMethod(_singularities,_collisions);
-//                std::reverse(_singularities.begin(), _singularities.end() );
-//                std::reverse(_collisions.begin(), _collisions.end());
             }
         }
     }
@@ -591,7 +588,10 @@ MyController::localSimulate(double dt) {
     }
 
 }
+#define endl1 }
 
+
+#define detectStatesMethod {
 /** Code developed with help from Bjørn-Richard Pedersen **/
 // Singularity handeling
 void
@@ -615,7 +615,9 @@ MyController::detectStates(StateChangeObj &state, double dt) {
 
     sphere->simulateToTInDt(time);
 }
+#define end1 }
 
+#define detectCollisionsMethod {
 /** Code developed with help from Bjørn-Richard Pedersen **/
 // Collision handeling
 void
@@ -676,9 +678,9 @@ MyController::detectCollisions(CollisionObject &c, double dt) {// check for coll
         }// additional collisions
     }
 }
+#define end1 }
 
-
-
+#define detectStateChangesMethod {
 void
 MyController::detectStateChanges(double dt) {
 
@@ -693,9 +695,10 @@ MyController::detectStateChanges(double dt) {
     }
 
 }
+#define end1 }
 
+#define detectStateChangeMethod {
 /** Code developed with help from Ghada Bouzidi and Fatemeh Heidari **/
-
 StateChangeObj
 MyController::detectStateChange(DynamicPSphere *sphere, double dt) {
 
@@ -803,8 +806,9 @@ MyController::detectStateChange(DynamicPSphere *sphere, double dt) {
     }
 
 }
+#define end1 }
 
-
+#define getAttachObjectsMethod {
 // Get planes attached to sphere
 std::unordered_set<StaticPPlane *>
 MyController::getAttachedObjects(DynamicPSphere* sphere)
@@ -818,7 +822,9 @@ MyController::getAttachedObjects(DynamicPSphere* sphere)
     }
     else return empty;
 }
+#define end1 }
 
+#define getAttachObjectsMethod {
 // Set objects attached to sphere
 void
 MyController::setAttachedObjects(std::unordered_set<StaticPPlane *> planes, DynamicPSphere* sphere)
@@ -827,28 +833,31 @@ MyController::setAttachedObjects(std::unordered_set<StaticPPlane *> planes, Dyna
        _attachedPlanes[sphere].emplace(plane);
     }
 }
+#define end1 }
 
-
+#define detachObjectsMethod {
 void
 MyController::detachObjects(DynamicPSphere *sphere){
 
    _attachedPlanes.erase(sphere);
 
 }
+#define end1 }
 
+#define ContainerReverseMethod {
 void MyController::reverseMethod(std::vector<StateChangeObj> singularitiesContainer,std::vector<CollisionObject> collisionsContainer)
 {
     std::reverse(singularitiesContainer.begin(), singularitiesContainer.end() );
     std::reverse(collisionsContainer.begin(), collisionsContainer.end());
 }
+#define end1 }
 
-// Adding objects to vector
+#define addingMethods {
 void
 MyController::add(DynamicPSphere * const sphere) {
 
     sphere->environment = &env;
     _dynamic_spheres.push_back(sphere);
-   _attachedPlanes[sphere];
 
 }
 void
@@ -871,7 +880,7 @@ MyController::add(StaticPBezierSurf * const surf) {
 
     _static_bezier_surf.push_back(surf);
 }
-
+#define end1 }
 
 
 #define movingSphereMethods {
@@ -1015,7 +1024,7 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::moveRight()
 
 
 
-
+#define getAndSetVelocityMethods {
 void collision::DynamicPhysObject<GMlib::PSphere<float> >::setVelocity(const GMlib::Vector<double, 3> vel)
 {
     this->velocity = vel;
@@ -1025,8 +1034,9 @@ GMlib::Vector<double, 3> collision::DynamicPhysObject<GMlib::PSphere<float> >::g
 {
     return this->velocity;
 }
+#define end1 }
 
-
+#define getAndSetIdMethods {
 int collision::StaticPhysObject<GMlib::PPlane<float> >::getId() const
 {
     return this->id;
@@ -1036,8 +1046,9 @@ void collision::StaticPhysObject<GMlib::PPlane<float> >::setId(int value)
 {
     this->id = value;
 }
+#define end1 }
 
-
+#define changePositionMethods {
 void collision::DynamicPhysObject<GMlib::PSphere<float> >::translateUp()
 {
     this->translateGlobal(GMlib::Vector<float,3>(0.0f,2.0f,0.0f));
@@ -1057,7 +1068,7 @@ void collision::DynamicPhysObject<GMlib::PSphere<float> >::translateRight()
 {
     this->translateGlobal(GMlib::Vector<float,3>(2.0f,0.0f,0.0f));
 }
-
+#define end1 }
 
 
 
