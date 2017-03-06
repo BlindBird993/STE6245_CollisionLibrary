@@ -341,7 +341,7 @@ DynamicPhysObject<GMlib::PSphere<float> >::simulateToTInDt(seconds_type t){
             auto F = this->externalForces();
             auto c = dt.count();
             auto a = F * c;
-            this->velocity -= a;
+            this->velocity -= a;//slow sphere down
 
             this->environment = &this->_sphereController->env;
         }
@@ -421,7 +421,6 @@ GMlib::Vector<double,3>
 DynamicPhysObject<GMlib::PSphere<float> >::externalForces() const {
 
     assert(environment != nullptr);
-
     return this->environment->externalForces().toType<double>();
 }
 #define end1 }
@@ -445,22 +444,20 @@ MyController::localSimulate(double dt) {
 
     // Collision detection algorithm
     for( auto& sphere : _dynamic_spheres) {
-
-            sphereCollision(sphere,seconds_type(dt));
+        sphereCollision(sphere,seconds_type(dt));
     }
     // Make Collision unique
     sortAndMakeUnique(_collisions);
 
     // Make both collisions and states unique in relation to each other
     if( !_collisions.empty() and !_singularities.empty() ) {
-
         crossUnique(_collisions, _singularities);
     }
     else {
         // Make sure that the newest event is at the front of the vector
         reverseMethod(_singularities,_collisions);
     }
-
+        //while we have a collision or state change
     while( !_collisions.empty() or !_singularities.empty() ) {
 
         // If both containers not empty
@@ -514,7 +511,6 @@ MyController::localSimulate(double dt) {
                 sortAndMakeUniqueStates(_singularities);
 
                 if( !_collisions.empty() and !_singularities.empty() ) {
-
                     crossUnique(_collisions, _singularities);
                 }
                 else {
@@ -605,14 +601,13 @@ MyController::detectStates(StateChangeObj &state, double dt) {
     if( newState == States::Free ) {
 
         detachObjects(sphere);
-        sphere->_state = newState;
     }
     else {
 
         setAttachedObjects(planes, sphere);
-        sphere->_state = newState;
     }
 
+    sphere->_state = newState;
     sphere->simulateToTInDt(time);
 }
 #define end1 }
@@ -637,30 +632,29 @@ MyController::detectCollisions(CollisionObject &c, double dt) {// check for coll
 
             if (d_sphere_2->_state == States::Still){
                 d_sphere_1->simulateToTInDt(c.t_in_dt);
-
                 d_sphere_2->curr_t_in_dt = d_sphere_1->curr_t_in_dt;
                 d_sphere_2->environment = &env;
                 d_sphere_2->_state = States::Rolling;
 
-                collision::computeImpactResponse( *d_sphere_1, *d_sphere_2, c.t_in_dt);    // D_Sphere vs. D_Sphere
+                collision::computeImpactResponse( *d_sphere_1, *d_sphere_2, c.t_in_dt);
             }
 
         else {
                 d_sphere_1->simulateToTInDt(c.t_in_dt);
                 d_sphere_2->simulateToTInDt(c.t_in_dt);
 
-                collision::computeImpactResponse( *d_sphere_1, *d_sphere_2, c.t_in_dt);    // D_Sphere vs. D_Sphere
+                collision::computeImpactResponse( *d_sphere_1, *d_sphere_2, c.t_in_dt);
             }
 
-            }
+          }
 
-        else if (d_sphere_1 && s_plane_2) {
+        else if (d_sphere_1 and s_plane_2) {
 
             if(d_sphere_1->_state != States::Still)
             {
                 d_sphere_1->simulateToTInDt(c.t_in_dt);
             }
-            collision::computeImpactResponse( *d_sphere_1, *s_plane_2, c.t_in_dt);      // D_Sphere vs. S_Plane
+            collision::computeImpactResponse( *d_sphere_1, *s_plane_2, c.t_in_dt);
 
         }
 
@@ -669,16 +663,17 @@ MyController::detectCollisions(CollisionObject &c, double dt) {// check for coll
     // If the dynamic object (obj1) is a sphere
     if( d_sphere_1) {
 
-        sphereCollision(d_sphere_1, seconds_type(dt));    // Does it collide with any static objects?  Can't with same obj as last time
+        sphereCollision(d_sphere_1, seconds_type(dt));    // Can't collide with same obj as last time
 
         // If sphere 1 collided with a dynamic sphere, check for that sphere's future collisions
         if(d_sphere_2) {
 
-            sphereCollision(d_sphere_2,seconds_type(dt));        // Does it collide with any static objects? Placeholder variable for "Last object"
+            sphereCollision(d_sphere_2,seconds_type(dt));
         }// additional collisions
     }
 }
 #define end1 }
+
 
 #define detectStateChangesMethod {
 void
@@ -808,6 +803,7 @@ MyController::detectStateChange(DynamicPSphere *sphere, double dt) {
 }
 #define end1 }
 
+
 #define getAttachObjectsMethod {
 // Get planes attached to sphere
 std::unordered_set<StaticPPlane *>
@@ -824,7 +820,7 @@ MyController::getAttachedObjects(DynamicPSphere* sphere)
 }
 #define end1 }
 
-#define getAttachObjectsMethod {
+#define setAttachObjectsMethod {
 // Set objects attached to sphere
 void
 MyController::setAttachedObjects(std::unordered_set<StaticPPlane *> planes, DynamicPSphere* sphere)
@@ -834,6 +830,7 @@ MyController::setAttachedObjects(std::unordered_set<StaticPPlane *> planes, Dyna
     }
 }
 #define end1 }
+
 
 #define detachObjectsMethod {
 void
